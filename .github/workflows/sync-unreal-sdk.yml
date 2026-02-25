@@ -1,0 +1,50 @@
+name: Sync Unreal SDK to unreal-sdk branch
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 06:00 UTC
+  workflow_dispatch:       # Manual trigger from GitHub Actions UI
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout unreal-sdk branch
+        uses: actions/checkout@v4
+        with:
+          ref: unreal-sdk
+          fetch-depth: 1
+
+      - name: Add upstream and fetch latest master
+        run: |
+          git remote add upstream https://github.com/clockworklabs/SpacetimeDB.git
+          git fetch upstream master --depth=1
+
+      - name: Replace branch content with upstream Unreal SDK
+        run: |
+          # Remove everything currently in the branch
+          git rm -rf . --quiet
+
+          # Checkout just the plugin directory from upstream master
+          git checkout upstream/master -- sdks/unreal/src/SpacetimeDbSdk
+
+          # Move plugin files to repo root
+          mv sdks/unreal/src/SpacetimeDbSdk/* .
+          rm -rf sdks/
+
+      - name: Commit and push if anything changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "unreal-sdk is already up to date."
+          else
+            UPSTREAM_HASH=$(git rev-parse --short upstream/master)
+            git commit -m "chore: sync Unreal SDK from upstream @ ${UPSTREAM_HASH}"
+            git push origin unreal-sdk
+          fi
